@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, pdfSignatures, pdfFiles, pdfTreatments, InsertPdfSignature, InsertPdfFile, InsertPdfTreatment } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,46 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// PDF-related database queries
+export async function getPdfSignaturesByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(pdfSignatures).where(eq(pdfSignatures.userId, userId));
+}
+
+export async function getPdfSignatureById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(pdfSignatures).where(eq(pdfSignatures.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createPdfSignature(signature: InsertPdfSignature) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(pdfSignatures).values(signature);
+}
+
+export async function deletePdfSignature(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(pdfSignatures).where(eq(pdfSignatures.id, id));
+}
+
+export async function getPdfTreatmentsByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(pdfTreatments).where(eq(pdfTreatments.userId, userId));
+}
+
+export async function createPdfFile(file: InsertPdfFile) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(pdfFiles).values(file);
+}
+
+export async function createPdfTreatment(treatment: InsertPdfTreatment) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(pdfTreatments).values(treatment);
+}
