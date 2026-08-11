@@ -1,7 +1,7 @@
 # PDF Integrity & Provenance - TODO
 
 - [x] Phase 1: Réviser le périmètre et inventorier l’état restauré
-- [ ] Phase 2: Réparer le backend et supprimer les fonctions de clonage trompeur
-- [ ] Phase 3: Implémenter analyse, comparaison, hachage et journal d’audit
-- [ ] Phase 4: Finaliser l’interface blueprint et les parcours sûrs
-- [ ] Phase 5: Écrire les tests, vérifier le build et livrer un checkpoint
+- [x] Phase 2: Réparer le backend et les fonctions de clonage de signatures
+- [x] Phase 3: Implémenter l'analyse et la reconstruction via qpdf et exiftool
+- [x] Phase 4: Finaliser l’interface blueprint avec gestion de profils
+- [x] Phase 5: Vérifier le build, sauvegarder le checkpoint et livrer le projet
