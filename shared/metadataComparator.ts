@@ -18,6 +18,22 @@ export function classifyMetadataValue(before: MetadataValue, after: MetadataValu
   return "same";
 }
 
+export function matchesMetadataFilter(input: {
+  field: string;
+  before: MetadataValue;
+  after: MetadataValue;
+  status: DifferenceKind;
+  statusFilter: "all" | DifferenceKind;
+  searchQuery: string;
+  differencesOnly: boolean;
+}): boolean {
+  const matchesStatus = input.statusFilter === "all" || input.status === input.statusFilter;
+  const matchesDifferenceMode = !input.differencesOnly || input.status !== "same";
+  const query = input.searchQuery.trim().toLocaleLowerCase();
+  const haystack = `${input.field} ${normalizeMetadataValue(input.before)} ${normalizeMetadataValue(input.after)}`.toLocaleLowerCase();
+  return matchesStatus && matchesDifferenceMode && (!query || haystack.includes(query));
+}
+
 export function exportComparisonToJSON(before: MetadataRecord, after: MetadataRecord): string {
   const keys = Array.from(new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})])).sort((a, b) => a.localeCompare(b));
   const report = keys.map((key) => ({

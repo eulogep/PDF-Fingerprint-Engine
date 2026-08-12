@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, Check, Download, FileText, Loader2, Minus, Plus, RefreshCw, Search, Share2, X } from "lucide-react";
+import { ArrowRight, Check, Download, Eye, EyeOff, FileText, Loader2, Minus, Plus, RefreshCw, Search, Share2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   classifyMetadataValue,
   exportComparisonToCSV,
+  matchesMetadataFilter,
   exportComparisonToJSON,
   normalizeMetadataValue,
   type DifferenceKind,
@@ -72,6 +73,7 @@ export function MetadataComparator({
 
   const [statusFilter, setStatusFilter] = useState<"all" | DifferenceKind>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [differencesOnly, setDifferencesOnly] = useState(compact);
 
   const counts = useMemo(() => rows.reduce(
     (result, row) => {
@@ -83,12 +85,16 @@ export function MetadataComparator({
 
   const filteredRows = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
-    return rows.filter((row) => {
-      const matchesStatus = statusFilter === "all" || row.kind === statusFilter;
-      const haystack = `${row.key} ${normalizeMetadataValue(row.before)} ${normalizeMetadataValue(row.after)}`.toLocaleLowerCase();
-      return matchesStatus && (!query || haystack.includes(query));
-    });
-  }, [rows, searchQuery, statusFilter]);
+    return rows.filter((row) => matchesMetadataFilter({
+      field: row.key,
+      before: row.before,
+      after: row.after,
+      status: row.kind,
+      statusFilter,
+      searchQuery: query,
+      differencesOnly,
+    }));
+  }, [rows, searchQuery, statusFilter, differencesOnly]);
 
   const [isSharing, setIsSharing] = useState(false);
   const [shareExpiresHours, setShareExpiresHours] = useState<number>(24);
@@ -215,8 +221,17 @@ export function MetadataComparator({
             </button>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <label htmlFor="metadata-status-filter" className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">Filtrer</label>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                aria-pressed={differencesOnly}
+                onClick={() => setDifferencesOnly((current) => !current)}
+                className={`inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${differencesOnly ? "border-primary bg-primary/10 text-primary" : "border-input bg-background text-foreground hover:bg-muted"}`}
+              >
+                {differencesOnly ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                {differencesOnly ? "Différences uniquement" : "Tous les champs"}
+              </button>
+              <label htmlFor="metadata-status-filter" className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">Filtrer</label>
           <select
             id="metadata-status-filter"
             value={statusFilter}
@@ -234,8 +249,8 @@ export function MetadataComparator({
 
       <div className="flex items-center justify-between border-b border-border px-4 py-2 text-xs text-muted-foreground">
         <span>{filteredRows.length} champ{filteredRows.length > 1 ? "s" : ""} affiché{filteredRows.length > 1 ? "s" : ""} sur {rows.length}</span>
-        {(statusFilter !== "all" || searchQuery) && (
-          <button type="button" className="font-medium text-primary hover:underline" onClick={() => { setStatusFilter("all"); setSearchQuery(""); }}>
+        {(statusFilter !== "all" || searchQuery || differencesOnly) && (
+          <button type="button" className="font-medium text-primary hover:underline" onClick={() => { setStatusFilter("all"); setSearchQuery(""); setDifferencesOnly(false); }}>
             Réinitialiser les filtres
           </button>
         )}
@@ -263,7 +278,7 @@ export function MetadataComparator({
       </div>
       {filteredRows.length === 0 && (
         <div className="p-8 text-center text-sm text-muted-foreground">
-          Aucun champ ne correspond aux filtres actuels.
+          Aucun champ ne correspond aux filtres actuels. Désactivez le mode compact ou modifiez la recherche.
         </div>
       )}
     </Card>
