@@ -5,7 +5,7 @@ import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
 import { analyzePdfSignature, rebuildPdfWithSignature, createTempPdfFile, cleanupTempFile } from "./pdf_utils";
-import { storagePut } from "./storage";
+import { storageGetSignedUrl, storagePut } from "./storage";
 import fs from "fs/promises";
 
 export const appRouter = router({
@@ -22,6 +22,32 @@ export const appRouter = router({
   }),
 
   pdf: router({
+    uploadPdf: protectedProcedure
+      .input(z.object({
+        filename: z.string().min(1).max(255),
+        data: z.string().min(1),
+        fileSize: z.number().int().positive(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const safeFilename = input.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const fileBuffer = Buffer.from(input.data, "base64");
+        if (fileBuffer.length !== input.fileSize) {
+          throw new Error("Le fichier PDF transmis est invalide ou incomplet");
+        }
+        const uploadResult = await storagePut(`pdf-input/${Date.now()}_${safeFilename}`, fileBuffer, "application/pdf");
+        const processingUrl = await storageGetSignedUrl(uploadResult.key);
+        const fileRecord = await db.createPdfFile({
+          userId: ctx.user.id,
+          filename: safeFilename,
+          s3Key: uploadResult.key,
+          s3Url: uploadResult.url,
+          fileType: "input",
+          mimeType: "application/pdf",
+          fileSize: fileBuffer.length,
+        });
+        return { fileUrl: uploadResult.url, processingUrl, fileId: Number((fileRecord as any).insertId) || null };
+      }),
+
     extractSignature: protectedProcedure
       .input(z.object({ fileUrl: z.string() }))
       .mutation(async ({ input, ctx }) => {
@@ -46,41 +72,59 @@ export const appRouter = router({
         metadata: z.record(z.string(), z.any()),
       }))
       .mutation(async ({ input, ctx }) => {
+        const startedAt = Date.now();
+        let targetPath = "";
+        let outputPath = "";
         try {
-          const targetPath = await createTempPdfFile();
-          const outputPath = await createTempPdfFile();
-          
+          targetPath = await createTempPdfFile();
+          outputPath = await createTempPdfFile();
+
           const response = await fetch(input.targetFileUrl);
+          if (!response.ok) {
+            throw new Error(`Impossible de télécharger le PDF cible (${response.status})`);
+          }
           const buffer = await response.arrayBuffer();
           await fs.writeFile(targetPath, Buffer.from(buffer));
-          
+
+          const metadataBefore = await analyzePdfSignature(targetPath);
           await rebuildPdfWithSignature(targetPath, outputPath, input.metadata);
-          
+          const metadataAfter = await analyzePdfSignature(outputPath);
+
           const resultBuffer = await fs.readFile(outputPath);
-          const uploadResult = await storagePut(
-            `pdf-rebuilt/${Date.now()}_rebuilt.pdf`,
-            resultBuffer
-          );
-          
-          await db.createPdfFile({
+          const filename = `rebuilt_${Date.now()}.pdf`;
+          const uploadResult = await storagePut(`pdf-rebuilt/${filename}`, resultBuffer, "application/pdf");
+
+          const rebuiltFile = await db.createPdfFile({
             userId: ctx.user.id,
-            filename: `rebuilt_${Date.now()}.pdf`,
+            filename,
             s3Key: uploadResult.key,
             s3Url: uploadResult.url,
             fileType: "rebuilt",
             mimeType: "application/pdf",
             fileSize: resultBuffer.length,
           });
-          
-          await cleanupTempFile(targetPath);
-          await cleanupTempFile(outputPath);
-          
+
+          await db.createPdfTreatment({
+            userId: ctx.user.id,
+            rebuiltFileId: Number((rebuiltFile as any).insertId) || null,
+            metadataUsed: JSON.stringify(input.metadata),
+            metadataBefore: JSON.stringify(metadataBefore),
+            metadataAfter: JSON.stringify(metadataAfter),
+            status: "completed",
+            processingTimeMs: Date.now() - startedAt,
+          });
+
           return {
             success: true,
             fileUrl: uploadResult.url,
+            metadataBefore,
+            metadataAfter,
           };
         } catch (error) {
           throw new Error(`Failed to rebuild PDF: ${error instanceof Error ? error.message : String(error)}`);
+        } finally {
+          if (targetPath) await cleanupTempFile(targetPath);
+          if (outputPath) await cleanupTempFile(outputPath);
         }
       }),
 

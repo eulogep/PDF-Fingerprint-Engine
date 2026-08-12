@@ -6,19 +6,35 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PdfUploader } from "@/components/PdfUploader";
 import { MetadataViewer } from "@/components/MetadataViewer";
+import { MetadataComparator } from "@/components/MetadataComparator";
 import { ProfileManager } from "@/components/ProfileManager";
 import { trpc } from "@/lib/trpc";
 import { Loader2, Download, ShieldCheck, History } from "lucide-react";
 import { toast } from "sonner";
+
+function parseMetadataSnapshot(value: unknown): Record<string, any> | null {
+  if (!value) return null;
+  if (typeof value === "object") return value as Record<string, any>;
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function Home() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [targetFile, setTargetFile] = useState<File | null>(null);
   const [extractedMetadata, setExtractedMetadata] = useState<any>(null);
+  const [comparisonMetadata, setComparisonMetadata] = useState<{ before: Record<string, any>; after: Record<string, any> } | null>(null);
+  const [selectedHistoryComparison, setSelectedHistoryComparison] = useState<{ id: number; before: Record<string, any>; after: Record<string, any> } | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isRebuilding, setIsRebuilding] = useState(false);
 
+  const uploadPdfMutation = trpc.pdf.uploadPdf.useMutation();
   const extractSignatureMutation = trpc.pdf.extractSignature.useMutation();
   const rebuildPdfMutation = trpc.pdf.rebuildPdf.useMutation();
   const { data: history, refetch: refetchHistory } = trpc.pdf.getTreatmentHistory.useQuery(undefined, {
@@ -26,21 +42,18 @@ export default function Home() {
   });
 
   const uploadFileToS3 = async (file: File): Promise<string> => {
-    // Utiliser le stockage S3 via une route de présignature ou FormData direct
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const uploadResponse = await fetch("/api/upload", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!uploadResponse.ok) {
-      throw new Error("Erreur lors de l'upload du fichier vers le serveur");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      binary += String.fromCharCode(...Array.from(bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length))));
     }
-
-    const data = await uploadResponse.json();
-    return data.url;
+    const data = await uploadPdfMutation.mutateAsync({
+      filename: file.name,
+      data: btoa(binary),
+      fileSize: file.size,
+    });
+    return data.processingUrl;
   };
 
   const handleExtractSignature = async () => {
@@ -77,6 +90,10 @@ export default function Home() {
         metadata: extractedMetadata,
       });
 
+      setComparisonMetadata({
+        before: result.metadataBefore as Record<string, any>,
+        after: result.metadataAfter as Record<string, any>,
+      });
       toast.success("PDF reconstruit avec succès");
       refetchHistory();
 
@@ -224,6 +241,14 @@ export default function Home() {
                     </>
                   )}
                 </Button>
+
+                {comparisonMetadata && (
+                  <MetadataComparator
+                    before={comparisonMetadata.before}
+                    after={comparisonMetadata.after}
+                    title="Métadonnées avant / après le traitement"
+                  />
+                )}
               </div>
             </Card>
           </TabsContent>
@@ -244,16 +269,42 @@ export default function Home() {
               {history && history.length > 0 ? (
                 <div className="space-y-4">
                   {history.map((item: any) => (
-                    <div key={item.id} className="p-4 rounded-lg border border-border bg-card flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-sm">Traitement #{item.id}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Date : {new Date(item.createdAt).toLocaleString()}
-                        </p>
+                    <div key={item.id} className="space-y-3">
+                      <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="font-semibold text-sm">Traitement #{item.id}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Date : {new Date(item.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                            {item.status}
+                          </span>
+                          {item.metadataBefore && item.metadataAfter && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const before = parseMetadataSnapshot(item.metadataBefore);
+                                const after = parseMetadataSnapshot(item.metadataAfter);
+                                if (before && after) setSelectedHistoryComparison({ id: item.id, before, after });
+                                else toast.error("Les métadonnées de comparaison sont indisponibles pour ce traitement.");
+                              }}
+                            >
+                              Comparer
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                        {item.status}
-                      </span>
+                      {selectedHistoryComparison && selectedHistoryComparison.id === item.id && (
+                        <MetadataComparator
+                          before={selectedHistoryComparison.before}
+                          after={selectedHistoryComparison.after}
+                          title={`Comparaison du traitement #${item.id}`}
+                          compact
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
