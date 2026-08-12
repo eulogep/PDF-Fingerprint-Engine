@@ -14,3 +14,4 @@
 - [x] Amélioration: Partage de rapport de comparaison (stockage S3 et lien temporaire)
 - [x] Amélioration: Sélecteur de durée de validité (1h, 24h, 7j) pour les liens de partage
 - [x] Amélioration: Mode d’affichage compact masquant les champs identiques et mettant en avant les différences
+- [x] Bugfix: Installer et rendre accessible `exiftool` pour le module Python `pdf_analyzer.py`
