@@ -9,3 +9,4 @@
 - [x] Remplacer `/api/upload` par une procédure tRPC S3 avec URL signée de traitement
 - [x] Retourner et enregistrer les snapshots `metadataBefore` et `metadataAfter`
 - [x] Ajouter des tests Vitest pour les différences de métadonnées
+- [x] Phase additionnelle: Exporter le rapport de comparaison en JSON et CSV

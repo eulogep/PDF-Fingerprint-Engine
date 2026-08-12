@@ -1,9 +1,12 @@
 import { useMemo } from "react";
-import { ArrowRight, Check, Minus, Plus, RefreshCw } from "lucide-react";
+import { ArrowRight, Check, Download, FileText, Minus, Plus, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   classifyMetadataValue,
+  exportComparisonToCSV,
+  exportComparisonToJSON,
   normalizeMetadataValue,
   type DifferenceKind,
   type MetadataRecord,
@@ -86,11 +89,50 @@ export function MetadataComparator({
             <h3 className="mt-1 text-lg font-semibold text-foreground">{title}</h3>
             <p className="mt-1 text-sm text-muted-foreground">Lecture côte à côte de l’état source et de l’état traité.</p>
           </div>
-          <div className="flex flex-wrap gap-2" aria-label="Résumé des différences">
-            <Badge variant="secondary"><Check className="mr-1 h-3 w-3" />{counts.same} identique{counts.same > 1 ? "s" : ""}</Badge>
-            {counts.changed > 0 && <Badge className="bg-rose-100 text-rose-800 hover:bg-rose-100 dark:bg-rose-950/60 dark:text-rose-200"><RefreshCw className="mr-1 h-3 w-3" />{counts.changed} modifié{counts.changed > 1 ? "s" : ""}</Badge>}
-            {counts.added > 0 && <Badge className="bg-cyan-100 text-cyan-800 hover:bg-cyan-100 dark:bg-cyan-950/60 dark:text-cyan-200"><Plus className="mr-1 h-3 w-3" />{counts.added} ajouté{counts.added > 1 ? "s" : ""}</Badge>}
-            {counts.removed > 0 && <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-200"><Minus className="mr-1 h-3 w-3" />{counts.removed} supprimé{counts.removed > 1 ? "s" : ""}</Badge>}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap gap-2" aria-label="Résumé des différences">
+              <Badge variant="secondary"><Check className="mr-1 h-3 w-3" />{counts.same} identique{counts.same > 1 ? "s" : ""}</Badge>
+              {counts.changed > 0 && <Badge className="bg-rose-100 text-rose-800 hover:bg-rose-100 dark:bg-rose-950/60 dark:text-rose-200"><RefreshCw className="mr-1 h-3 w-3" />{counts.changed} modifié{counts.changed > 1 ? "s" : ""}</Badge>}
+              {counts.added > 0 && <Badge className="bg-cyan-100 text-cyan-800 hover:bg-cyan-100 dark:bg-cyan-950/60 dark:text-cyan-200"><Plus className="mr-1 h-3 w-3" />{counts.added} ajouté{counts.added > 1 ? "s" : ""}</Badge>}
+              {counts.removed > 0 && <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-200"><Minus className="mr-1 h-3 w-3" />{counts.removed} supprimé{counts.removed > 1 ? "s" : ""}</Badge>}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const json = exportComparisonToJSON(before, after);
+                  const blob = new Blob([json], { type: "application/json" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `pdf_comparison_report_${Date.now()}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                Export JSON
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const csv = exportComparisonToCSV(before, after);
+                  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `pdf_comparison_report_${Date.now()}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                <FileText className="mr-1.5 h-3.5 w-3.5" />
+                Export CSV
+              </Button>
+            </div>
           </div>
         </div>
       </div>

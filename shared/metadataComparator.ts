@@ -17,3 +17,28 @@ export function classifyMetadataValue(before: MetadataValue, after: MetadataValu
   if (normalizeMetadataValue(before).trim() !== normalizeMetadataValue(after).trim()) return "changed";
   return "same";
 }
+
+export function exportComparisonToJSON(before: MetadataRecord, after: MetadataRecord): string {
+  const keys = Array.from(new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})])).sort((a, b) => a.localeCompare(b));
+  const report = keys.map((key) => ({
+    field: key,
+    before: before?.[key] ?? null,
+    after: after?.[key] ?? null,
+    status: classifyMetadataValue(before?.[key], after?.[key]),
+  }));
+  return JSON.stringify({ generatedAt: new Date().toISOString(), totalFields: report.length, items: report }, null, 2);
+}
+
+export function exportComparisonToCSV(before: MetadataRecord, after: MetadataRecord): string {
+  const keys = Array.from(new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})])).sort((a, b) => a.localeCompare(b));
+  const rows = [
+    ["Field", "Before", "After", "Status"],
+    ...keys.map((key) => {
+      const bVal = normalizeMetadataValue(before?.[key]).replace(/"/g, '""');
+      const aVal = normalizeMetadataValue(after?.[key]).replace(/"/g, '""');
+      const status = classifyMetadataValue(before?.[key], after?.[key]);
+      return [`"${key}"`, `"${bVal}"`, `"${aVal}"`, `"${status}"`];
+    }),
+  ];
+  return rows.join("\n");
+}
