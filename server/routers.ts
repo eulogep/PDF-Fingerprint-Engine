@@ -173,6 +173,25 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    shareComparisonReport: protectedProcedure
+      .input(z.object({
+        reportJson: z.string().min(2),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const buffer = Buffer.from(input.reportJson, "utf-8");
+          const uploadResult = await storagePut(`pdf-reports/${Date.now()}_comparison.json`, buffer, "application/json");
+          const signedUrl = await storageGetSignedUrl(uploadResult.key);
+          return {
+            success: true,
+            shareUrl: uploadResult.url,
+            signedUrl,
+          };
+        } catch (error) {
+          throw new Error(`Failed to share report: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }),
+
     getTreatmentHistory: protectedProcedure.query(({ ctx }) =>
       db.getPdfTreatmentsByUser(ctx.user.id)
     ),

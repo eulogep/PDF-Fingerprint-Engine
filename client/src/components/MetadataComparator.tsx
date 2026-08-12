@@ -1,8 +1,10 @@
-import { useMemo } from "react";
-import { ArrowRight, Check, Download, FileText, Minus, Plus, RefreshCw } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowRight, Check, Download, FileText, Loader2, Minus, Plus, RefreshCw, Search, Share2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import {
   classifyMetadataValue,
   exportComparisonToCSV,
@@ -68,6 +70,9 @@ export function MetadataComparator({
     return keys.map((key) => ({ key, before: before?.[key], after: after?.[key], kind: classifyMetadataValue(before?.[key], after?.[key]) }));
   }, [before, after]);
 
+  const [statusFilter, setStatusFilter] = useState<"all" | DifferenceKind>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
   const counts = useMemo(() => rows.reduce(
     (result, row) => {
       result[row.kind] += 1;
@@ -75,6 +80,32 @@ export function MetadataComparator({
     },
     { same: 0, changed: 0, added: 0, removed: 0 } as Record<DifferenceKind, number>,
   ), [rows]);
+
+  const filteredRows = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return rows.filter((row) => {
+      const matchesStatus = statusFilter === "all" || row.kind === statusFilter;
+      const haystack = `${row.key} ${normalizeMetadataValue(row.before)} ${normalizeMetadataValue(row.after)}`.toLocaleLowerCase();
+      return matchesStatus && (!query || haystack.includes(query));
+    });
+  }, [rows, searchQuery, statusFilter]);
+
+  const [isSharing, setIsSharing] = useState(false);
+  const shareMutation = trpc.pdf.shareComparisonReport.useMutation();
+
+  const handleShareReport = async () => {
+    setIsSharing(true);
+    try {
+      const json = exportComparisonToJSON(before, after);
+      const res = await shareMutation.mutateAsync({ reportJson: json });
+      await navigator.clipboard.writeText(res.signedUrl);
+      toast.success("Lien temporaire signé copié dans le presse-papier !");
+    } catch (error) {
+      toast.error(`Erreur de partage: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
   if (rows.length === 0) {
     return <Card className="w-full border-dashed"><div className="p-6 text-center text-sm text-muted-foreground">Aucune métadonnée disponible pour effectuer la comparaison.</div></Card>;
@@ -132,9 +163,66 @@ export function MetadataComparator({
                 <FileText className="mr-1.5 h-3.5 w-3.5" />
                 Export CSV
               </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleShareReport}
+                disabled={isSharing}
+              >
+                {isSharing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Share2 className="mr-1.5 h-3.5 w-3.5" />}
+                Partager
+              </Button>
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-3 border-b border-border bg-muted/20 p-4 md:flex-row md:items-center md:justify-between">
+        <div className="relative w-full md:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Rechercher un champ ou une valeur…"
+            aria-label="Rechercher dans les métadonnées"
+            className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-9 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              aria-label="Effacer la recherche"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="metadata-status-filter" className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">Filtrer</label>
+          <select
+            id="metadata-status-filter"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as "all" | DifferenceKind)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="all">Tous les statuts ({rows.length})</option>
+            <option value="changed">Modifiés ({counts.changed})</option>
+            <option value="added">Ajoutés ({counts.added})</option>
+            <option value="removed">Supprimés ({counts.removed})</option>
+            <option value="same">Identiques ({counts.same})</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between border-b border-border px-4 py-2 text-xs text-muted-foreground">
+        <span>{filteredRows.length} champ{filteredRows.length > 1 ? "s" : ""} affiché{filteredRows.length > 1 ? "s" : ""} sur {rows.length}</span>
+        {(statusFilter !== "all" || searchQuery) && (
+          <button type="button" className="font-medium text-primary hover:underline" onClick={() => { setStatusFilter("all"); setSearchQuery(""); }}>
+            Réinitialiser les filtres
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 border-b border-border bg-muted/30 text-[11px] font-mono uppercase tracking-[0.12em] text-muted-foreground md:grid-cols-[minmax(130px,0.65fr)_minmax(0,1fr)_32px_minmax(0,1fr)]">
@@ -145,7 +233,7 @@ export function MetadataComparator({
       </div>
 
       <div className="divide-y divide-border">
-        {rows.map((row) => (
+        {filteredRows.map((row) => (
           <div key={row.key} className={`grid grid-cols-1 gap-3 border-l-4 p-4 transition-colors md:grid-cols-[minmax(130px,0.65fr)_minmax(0,1fr)_32px_minmax(0,1fr)] md:items-start ${kindClasses[row.kind]}`}>
             <div className="flex items-center justify-between gap-3 md:block">
               <span className="font-mono text-xs font-semibold text-foreground">{row.key}</span>
@@ -157,6 +245,11 @@ export function MetadataComparator({
           </div>
         ))}
       </div>
+      {filteredRows.length === 0 && (
+        <div className="p-8 text-center text-sm text-muted-foreground">
+          Aucun champ ne correspond aux filtres actuels.
+        </div>
+      )}
     </Card>
   );
 }
