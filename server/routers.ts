@@ -176,12 +176,14 @@ export const appRouter = router({
     shareComparisonReport: protectedProcedure
       .input(z.object({
         reportJson: z.string().min(2),
+        expiresHours: z.number().int().positive().default(24),
       }))
       .mutation(async ({ input, ctx }) => {
         try {
           const buffer = Buffer.from(input.reportJson, "utf-8");
           const uploadResult = await storagePut(`pdf-reports/${Date.now()}_comparison.json`, buffer, "application/json");
-          const signedUrl = await storageGetSignedUrl(uploadResult.key);
+          const expiresInSeconds = input.expiresHours * 3600;
+          const signedUrl = await storageGetSignedUrl(uploadResult.key, expiresInSeconds);
           return {
             success: true,
             shareUrl: uploadResult.url,

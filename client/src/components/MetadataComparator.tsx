@@ -91,15 +91,19 @@ export function MetadataComparator({
   }, [rows, searchQuery, statusFilter]);
 
   const [isSharing, setIsSharing] = useState(false);
+  const [shareExpiresHours, setShareExpiresHours] = useState<number>(24);
   const shareMutation = trpc.pdf.shareComparisonReport.useMutation();
 
   const handleShareReport = async () => {
     setIsSharing(true);
     try {
       const json = exportComparisonToJSON(before, after);
-      const res = await shareMutation.mutateAsync({ reportJson: json });
+      const res = await shareMutation.mutateAsync({
+        reportJson: json,
+        expiresHours: shareExpiresHours,
+      });
       await navigator.clipboard.writeText(res.signedUrl);
-      toast.success("Lien temporaire signé copié dans le presse-papier !");
+      toast.success(`Lien temporaire (${shareExpiresHours === 1 ? "1 heure" : shareExpiresHours === 24 ? "24 heures" : "7 jours"}) copié !`);
     } catch (error) {
       toast.error(`Erreur de partage: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
@@ -163,15 +167,27 @@ export function MetadataComparator({
                 <FileText className="mr-1.5 h-3.5 w-3.5" />
                 Export CSV
               </Button>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleShareReport}
-                disabled={isSharing}
-              >
-                {isSharing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Share2 className="mr-1.5 h-3.5 w-3.5" />}
-                Partager
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={shareExpiresHours}
+                  onChange={(e) => setShareExpiresHours(Number(e.target.value))}
+                  aria-label="Durée de validité du lien de partage"
+                  className="h-9 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value={1}>1 heure</option>
+                  <option value={24}>24 heures</option>
+                  <option value={168}>7 jours</option>
+                </select>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleShareReport}
+                  disabled={isSharing}
+                >
+                  {isSharing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Share2 className="mr-1.5 h-3.5 w-3.5" />}
+                  Partager
+                </Button>
+              </div>
             </div>
           </div>
         </div>

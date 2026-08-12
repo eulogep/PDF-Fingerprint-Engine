@@ -12,3 +12,4 @@
 - [x] Phase additionnelle: Exporter le rapport de comparaison en JSON et CSV
 - [x] Amélioration: Filtres par statut et recherche textuelle dans le comparateur
 - [x] Amélioration: Partage de rapport de comparaison (stockage S3 et lien temporaire)
+- [x] Amélioration: Sélecteur de durée de validité (1h, 24h, 7j) pour les liens de partage
